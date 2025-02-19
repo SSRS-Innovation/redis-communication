@@ -34,6 +34,13 @@ class RedisClient:
             channel_name: str,
             callback: callable
     ):
+        """
+        Adds a subscriber to a specified Redis channel and sets a callback function.
+
+        :param channel_name: The name of the Redis channel to subscribe to.
+        :param callback: A callable function to handle messages received from the channel. Should accept two arguments: timestamp and content.
+        """
+
         # return if channel has already been added
         if channel_name in self._callbacks:
             print(f'Error: channel "{channel_name}" already exists.', flush=True)
@@ -46,6 +53,12 @@ class RedisClient:
             self,
             channel_name: str
     ):
+        """
+        Removes a subscriber from a specified Redis channel.
+
+        :param channel_name: The name of the Redis channel to unsubscribe from.
+        """
+
         try:
             self._callbacks.pop(channel_name)
         except KeyError:
@@ -57,6 +70,13 @@ class RedisClient:
             channel_name: str,
             content: str | int | float | dict | list
     ):
+        """
+        Sends a message to a Redis channel.
+
+        :param channel_name: The name of the Redis channel to publish the message.
+        :param content: The content to be sent (must be serializable to JSON).
+        """
+
         # add timestamp
         content = {"timestamp": time.time(), "content": content}
         content = self._to_json(content)
@@ -65,6 +85,12 @@ class RedisClient:
             self._r.publish(channel_name, content)
 
     def listen(self):
+        """
+         Starts listening for incoming messages on subscribed channels and executes their respective callbacks.
+
+         Note: This method runs an infinite loop to process incoming messages.
+         """
+
         for event in self._pubsub.listen():
             if event["type"] == "message":
                 channel_name = event["channel"].decode("utf-8")
@@ -83,6 +109,13 @@ class RedisClient:
             stream_name: str,
             content: str | int | float | dict | list
     ):
+        """
+        Adds a message to a specified Redis stream.
+
+        :param stream_name: The name of the Redis stream.
+        :param content: The content to add to the stream (must be serializable to JSON).
+        """
+
         content = self._to_json(content)
         self._r.xadd(stream_name, {'timestamp': time.time(), 'content': content})
 
@@ -90,6 +123,13 @@ class RedisClient:
             self,
             stream_name: str
     ) -> tuple[float, str | int | float | dict | list] | tuple[None, None]:
+        """
+        Retrieves the latest message from a Redis stream.
+
+        :param stream_name: The name of the Redis stream.
+        :return: A tuple containing the timestamp and the message content, or (None, None) if no messages exist.
+        """
+
         # read the latest message
         raw_message = self._r.xrevrange(stream_name, count=1)
         # return None if no messages
@@ -107,6 +147,14 @@ class RedisClient:
             stream_name: str,
             max_messages: int = None
     ) -> list[tuple[float, str | int | float | dict | list]] | list[tuple[None, None]]:
+        """
+        Retrieves unread messages from a Redis stream, starting from the last-read stream ID.
+
+        :param stream_name: The name of the Redis stream.
+        :param max_messages: The maximum number of unread messages to fetch.
+        :return: List of tuples (timestamp, content) or (None, None) if no unread messages exist.
+        """
+
         messages = []
         # if it is the first time, get all messages (indicated by 0)
         stream_id = self._last_stream_ids.get(stream_name, "0")
@@ -129,6 +177,13 @@ class RedisClient:
     def _to_json(
             message: str | int | float | dict | list
     ) -> str | None:
+        """
+        Converts a Python object into a JSON-formatted string.
+
+        :param message: The Python object to be serialized (str, int, float, dict, list, etc.).
+        :return: JSON-formatted string or None if serialization fails.
+        """
+
         # test if json serializable
         try:
             return json.dumps(message)
@@ -140,17 +195,32 @@ class RedisClient:
     def _from_json(
             message: str
     ) -> str | int | float | dict | list:
+        """
+        Decodes a JSON-formatted string into a Python object.
+
+        :param message: JSON-formatted string to decode.
+        :return: Decoded Python object (dict, list, etc.) or the input unchanged if decoding fails.
+        """
+
         try:
             return json.loads(message)
         except json.decoder.JSONDecodeError as e:
             print(f"Error: could not read message: {message}. {e}", flush=True)
         except TypeError as e:
             print(e, flush=True)
+        return message
 
     @staticmethod
     def _decode_stream_message(
             message: list[dict[bytes]]
     ) -> tuple[float, str | int | float | dict | list]:
+        """
+        Decodes raw Redis stream messages into tuples with timestamps and content.
+
+        :param raw_messages: List of raw stream messages from Redis, each containing an ID and fields (dictionary).
+        :return: List of tuples (timestamp, content).
+        """
+
         # decode timestamp and message
         timestamp = float(message[1][b"timestamp"].decode("utf-8"))
         content = RedisClient._from_json(message[1][b"content"])
