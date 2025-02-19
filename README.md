@@ -80,7 +80,7 @@ Fetches the most recent message from a Redis stream.
   - `stream_name` (str): The name of the stream to retrieve messages from.
 - **Returns**:
   - A tuple containing:
-    - `timestamp` (float): The timestamp of the message.
+    - `timestamp` (int, int): The server time when the message was sent.
     - `content` (deserialized JSON object): The actual message from the stream.
   - Returns `(None, None)` if there are no messages in the stream.
 
@@ -91,7 +91,7 @@ Fetches unread messages from a Redis stream since the last read message.
   - `max_messages` (int, optional): Maximum number of messages to fetch.
 - **Returns**: 
   - A list of tuples, where each tuple contains:
-    - `timestamp` (float).
+    - `timestamp` (int, int).
     - `content` (deserialized JSON object).
   - Returns `[(None, None)]` if no unread messages are available.
 

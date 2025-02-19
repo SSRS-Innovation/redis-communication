@@ -1,6 +1,6 @@
 import redis
-import time
 import json
+import ast
 
 
 class RedisClient:
@@ -78,7 +78,7 @@ class RedisClient:
         """
 
         # add timestamp
-        content = {"timestamp": time.time(), "content": content}
+        content = {"timestamp": self._r.time(), "content": content}
         content = self._to_json(content)
         if content is not None:
             # send message
@@ -117,12 +117,12 @@ class RedisClient:
         """
 
         content = self._to_json(content)
-        self._r.xadd(stream_name, {'timestamp': time.time(), 'content': content})
+        self._r.xadd(stream_name, {'timestamp': str(self._r.time()), 'content': content})
 
     def get_latest_stream_message(
             self,
             stream_name: str
-    ) -> tuple[float, str | int | float | dict | list] | tuple[None, None]:
+    ) -> tuple[tuple[int, int], str | int | float | dict | list] | tuple[None, None]:
         """
         Retrieves the latest message from a Redis stream.
 
@@ -146,7 +146,7 @@ class RedisClient:
             self,
             stream_name: str,
             max_messages: int = None
-    ) -> list[tuple[float, str | int | float | dict | list]] | list[tuple[None, None]]:
+    ) -> list[tuple[tuple[int, int], str | int | float | dict | list]] | list[tuple[None, None]]:
         """
         Retrieves unread messages from a Redis stream, starting from the last-read stream ID.
 
@@ -213,7 +213,7 @@ class RedisClient:
     @staticmethod
     def _decode_stream_message(
             message: list[dict[bytes]]
-    ) -> tuple[float, str | int | float | dict | list]:
+    ) -> tuple[tuple[int, int], str | int | float | dict | list]:
         """
         Decodes raw Redis stream messages into tuples with timestamps and content.
 
@@ -222,6 +222,6 @@ class RedisClient:
         """
 
         # decode timestamp and message
-        timestamp = float(message[1][b"timestamp"].decode("utf-8"))
+        timestamp = ast.literal_eval(message[1][b"timestamp"].decode("utf-8"))
         content = RedisClient._from_json(message[1][b"content"])
         return timestamp, content
