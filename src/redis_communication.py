@@ -1,13 +1,12 @@
 import redis
 import json
 import ast
+import time
 
 
 class RedisClient:
     """
     Initializes the RedisClient.
-
-    :param redis_client: The Redis connection object used for communication with the Redis server.
     """
 
     def __init__(
@@ -19,13 +18,20 @@ class RedisClient:
         self._callbacks = {}
         self._last_stream_ids = {}
 
-        try:
-            self._r.ping()
-        except redis.exceptions.ConnectionError as e:
-            print("Redis server is not responding.")
-            print(e, flush=True)
+        # Make 3 attempts to connect to redis server, raise error if all fails
+        for attempt in range(3):
+            try:
+                self._r.ping()
+            except redis.exceptions.ConnectionError as e:
+                if attempt == 2:
+                    print(f"Redis {e}", flush=True)
+                    exit(1)
+                print("Redis server is not responding. Sleeping...", flush=True)
+                time.sleep(5)
 
-            exit(1)
+                continue
+            print(f"Connected to Redis server at {host}:{port}", flush=True)
+            break
 
         self._pubsub = self._r.pubsub()
 
