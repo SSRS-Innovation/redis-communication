@@ -179,6 +179,9 @@ class RedisClient:
             messages.append(self._decode_stream_message(r))
         return messages
 
+    def get_server_time(self):
+        return self._r.time()
+
     @staticmethod
     def _to_json(
             message: str | int | float | dict | list
