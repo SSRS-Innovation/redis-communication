@@ -1,12 +1,12 @@
 import redis
 import json
 import ast
-import time
+import asyncio
 
 
 class RedisClient:
     """
-    Initializes the RedisClient.
+    Initializes the Redis connection.
     """
 
     def __init__(
@@ -14,28 +14,27 @@ class RedisClient:
             host: str = "localhost",
             port: int = 6379,
     ):
-        self._r = redis.Redis(host=host, port=port, db=0)
         self._callbacks = {}
         self._last_stream_ids = {}
+        self._r = None
+        self._pubsub = None
 
-        # Make 3 attempts to connect to redis server, raise error if all fails
-        for attempt in range(3):
+    async def connect_to_server(self, host: str = "localhost", port: int = 6379):
+        # attempt connection every 5 seconds until successful
+        r = await redis.asyncio.Redis(host=host, port=port, db=0)
+        while True:
             try:
-                self._r.ping()
+                await r.ping()
+                print(f"Connected to Redis server at {host}:{port}", flush=True)
+                self._r = r
+                self._pubsub = r.pubsub()
+                break
+
             except redis.exceptions.ConnectionError as e:
-                if attempt == 2:
-                    print(f"Redis {e}", flush=True)
-                    exit(1)
-                print("Redis server is not responding. Sleeping...", flush=True)
-                time.sleep(5)
+                print("Redis server is not responding. Sleeping 5 seconds...", flush=True)
+                await asyncio.sleep(5)
 
-                continue
-            print(f"Connected to Redis server at {host}:{port}", flush=True)
-            break
-
-        self._pubsub = self._r.pubsub()
-
-    def add_subscriber(
+    async def add_subscriber(
             self,
             channel_name: str,
             callback: callable
@@ -53,9 +52,9 @@ class RedisClient:
             return
         # save subscription
         self._callbacks[channel_name] = callback
-        self._pubsub.subscribe(channel_name)
+        await self._pubsub.subscribe(channel_name)
 
-    def remove_subscriber(
+    async def remove_subscriber(
             self,
             channel_name: str
     ):
@@ -69,9 +68,9 @@ class RedisClient:
             self._callbacks.pop(channel_name)
         except KeyError:
             return
-        self._pubsub.unsubscribe(channel_name)
+        await self._pubsub.unsubscribe(channel_name)
 
-    def send_message(
+    async def send_message(
             self,
             channel_name: str,
             content: str | int | float | dict | list
@@ -84,20 +83,17 @@ class RedisClient:
         """
 
         # add timestamp
-        content = {"timestamp": self._r.time(), "content": content}
+        content = {"timestamp": await self._r.time(), "content": content}
         content = self._to_json(content)
         if content is not None:
             # send message
-            self._r.publish(channel_name, content)
+            await self._r.publish(channel_name, content)
 
-    def listen(self):
+    async def listen(self):
         """
-         Starts listening for incoming messages on subscribed channels and executes their respective callbacks.
-
-         Note: This method runs an infinite loop to process incoming messages.
-         """
-
-        for event in self._pubsub.listen():
+        Starts listening for incoming messages on subscribed channels and executes their respective callbacks.
+        """
+        async for event in self._pubsub.listen():
             if event["type"] == "message":
                 channel_name = event["channel"].decode("utf-8")
                 message = self._from_json(event["data"])
@@ -105,12 +101,12 @@ class RedisClient:
                     print(f"Error: message should contain 'timestamp' and 'content' but got: {message}", flush=True)
                     continue
                 try:
-                    self._callbacks[channel_name](message['timestamp'], message['content'])
+                    asyncio.create_task(self._callbacks[channel_name](message['timestamp'], message['content']))
                 except TypeError:
                     print(f"Error: callback for channel '{channel_name}' has invalid signature. Should be (timestamp:float, content: Any)", flush=True)
                     continue
 
-    def add_stream_message(
+    async def add_stream_message(
             self,
             stream_name: str,
             content: str | int | float | dict | list
@@ -123,9 +119,9 @@ class RedisClient:
         """
 
         content = self._to_json(content)
-        self._r.xadd(stream_name, {'timestamp': str(self._r.time()), 'content': content})
+        await self._r.xadd(stream_name, {'timestamp': str(await self._r.time()), 'content': content})
 
-    def get_latest_stream_message(
+    async def get_latest_stream_message(
             self,
             stream_name: str
     ) -> tuple[tuple[int, int], str | int | float | dict | list] | tuple[None, None]:
@@ -135,9 +131,8 @@ class RedisClient:
         :param stream_name: The name of the Redis stream.
         :return: A tuple containing the timestamp and the message content, or (None, None) if no messages exist.
         """
-
         # read the latest message
-        raw_message = self._r.xrevrange(stream_name, count=1)
+        raw_message = await self._r.xrevrange(stream_name, count=1)
         # return None if no messages
         if len(raw_message) == 0:
             return None, None
@@ -145,10 +140,9 @@ class RedisClient:
         raw_message = raw_message[0]
         # save last read stream id
         self._last_stream_ids[stream_name] = raw_message[0].decode("utf-8")
-
         return self._decode_stream_message(raw_message)
 
-    def get_unread_stream_messages(
+    async def get_unread_stream_messages(
             self,
             stream_name: str,
             max_messages: int = None
@@ -164,7 +158,7 @@ class RedisClient:
         messages = []
         # if it is the first time, get all messages (indicated by 0)
         stream_id = self._last_stream_ids.get(stream_name, "0")
-        raw_messages = self._r.xrange(stream_name, stream_id, "+", count=max_messages)
+        raw_messages = await self._r.xrange(stream_name, stream_id, "+", count=max_messages)
         if len(raw_messages) == 0:
             return [(None, None)]
         # if it not the first time, omit the first message in list because xrange is inclusive
@@ -229,5 +223,6 @@ class RedisClient:
 
         # decode timestamp and message
         timestamp = ast.literal_eval(message[1][b"timestamp"].decode("utf-8"))
+        #timestamp = message[1][b"timestamp"].decode("utf-8")
         content = RedisClient._from_json(message[1][b"content"])
         return timestamp, content

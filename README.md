@@ -1,4 +1,4 @@
-## Redis Communication Module Documentation
+## Async Redis Communication Module Documentation
 
 This document provides an overview and instructions for the utilization of the **Redis Communication Module** implemented in the `redis_communication.py`. The module leverages the `redis` Python library to provide an interface for interacting with a Redis server. Below is a detailed explanation of its features, classes, and methods.
 
@@ -17,7 +17,7 @@ The class is designed with error handling for Redis connection failures and ensu
 
 ### **Core Features**
 
-#### **Initialization**
+#### **Initialize using `connect_to_server`**
 Upon instantiating the `RedisClient`:
 - A connection is established to the Redis server running on `localhost:6379` by default.
 - A `pubsub` object is created for Pub/Sub functionality.
@@ -31,7 +31,7 @@ The module handles key errors such as:
 ---
 
 ### **Notes**
-1. **Dependencies**: Ensure the `redis` Python package is installed (`pip install redis`).
+1. **Dependencies**: Ensure the `redis` and `asyncio` Python packages are installed (`pip install redis asyncio`).
 2. **Redis Server**: The module requires an active Redis server on `localhost:6379` by default.
 
 ---
@@ -102,6 +102,7 @@ Fetches unread messages from a Redis stream since the last read message.
 #### **1. Creating a Redis Client**
 ```python
 redis_client = RedisClient()
+await redis_client.connect_to_server()
 ```
 
 #### **2. Publishing a Message**
@@ -109,29 +110,30 @@ redis_client = RedisClient()
 ```python
 channel = "news"
 content = {"headline": "Redis is great!", "content": "Learn how to use Redis in Python easily."}
-redis_client.send_message(channel, content)
+await redis_client.send_message(channel, content)
 ```
 
 #### **3. Subscribing to a Channel and awaiting messages**
 ```python
-def my_callback(timestamp, content):
+import asyncio
+async def my_callback(timestamp, content):
     print(f"Received message: {content}")
 
-redis_client.add_subscriber("news", my_callback)
-redis_client.listen()
+await redis_client.add_subscriber("news", my_callback)
+asyncio.create_task(redis_client.listen())
 ```
 
 #### **4. Adding Messages to a Stream**
 ```python
 stream_name = "logs"
 content = {"level": "info", "message": "Application started."}
-redis_client.add_stream_message(stream_name, content)
+await redis_client.add_stream_message(stream_name, content)
 ```
 
 #### **5. Fetching Latest Stream Message**
 ```python
 stream_name = "logs"
-timestamp, content = redis_client.get_latest_stream_message(stream_name)
+timestamp, content = await redis_client.get_latest_stream_message(stream_name)
 print(f"Timestamp: {timestamp}, Message: {content}")
 ```
 
