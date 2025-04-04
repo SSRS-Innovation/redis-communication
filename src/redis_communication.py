@@ -19,13 +19,10 @@ class RedisClient:
         self._last_stream_ids = {}
 
         # Make 3 attempts to connect to redis server, raise error if all fails
-        for attempt in range(3):
+        while True:
             try:
                 self._r.ping()
             except redis.exceptions.ConnectionError as e:
-                if attempt == 2:
-                    print(f"Redis {e}", flush=True)
-                    exit(1)
                 print("Redis server is not responding. Sleeping...", flush=True)
                 time.sleep(5)
 
