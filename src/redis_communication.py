@@ -18,16 +18,20 @@ class RedisClient:
         self._last_stream_ids = {}
         self._r = None
         self._pubsub = None
+        self.host = host
+        self.port = port
 
     async def connect_to_server(self, host: str = "localhost", port: int = 6379):
+        self._r = await redis.asyncio.Redis(host=host, port=port, db=0)
+        await self._reconnect_to_server(host, port)
+        self._pubsub = self._r.pubsub()
+
+    async def _reconnect_to_server(self, host: str = "localhost", port: int = 6379):
         # attempt connection every 5 seconds until successful
-        r = await redis.asyncio.Redis(host=host, port=port, db=0)
         while True:
             try:
-                await r.ping()
+                await self._r.ping()
                 print(f"Connected to Redis server at {host}:{port}", flush=True)
-                self._r = r
-                self._pubsub = r.pubsub()
                 break
 
             except redis.exceptions.ConnectionError as e:
@@ -81,30 +85,38 @@ class RedisClient:
         :param channel_name: The name of the Redis channel to publish the message.
         :param content: The content to be sent (must be serializable to JSON).
         """
-
-        # add timestamp
-        content = {"timestamp": await self._r.time(), "content": content}
-        content = self._to_json(content)
-        if content is not None:
-            # send message
-            await self._r.publish(channel_name, content)
+        try:
+            # add timestamp
+            content = {"timestamp": await self._r.time(), "content": content}
+            content = self._to_json(content)
+            if content is not None:
+                # send message
+                await self._r.publish(channel_name, content)
+        except redis.exceptions.ConnectionError:
+            await self._reconnect_to_server(self.host, self.port)
+            await self.send_message(channel_name, content)
 
     async def listen(self):
         """
         Starts listening for incoming messages on subscribed channels and executes their respective callbacks.
         """
-        async for event in self._pubsub.listen():
-            if event["type"] == "message":
-                channel_name = event["channel"].decode("utf-8")
-                message = self._from_json(event["data"])
-                if not {'timestamp', 'content'} == message.keys():
-                    print(f"Error: message should contain 'timestamp' and 'content' but got: {message}", flush=True)
-                    continue
-                try:
-                    asyncio.create_task(self._callbacks[channel_name](message['timestamp'], message['content']))
-                except TypeError:
-                    print(f"Error: callback for channel '{channel_name}' has invalid signature. Should be (timestamp:float, content: Any)", flush=True)
-                    continue
+        try:
+            async for event in self._pubsub.listen():
+                print("ugga")
+                if event["type"] == "message":
+                    channel_name = event["channel"].decode("utf-8")
+                    message = self._from_json(event["data"])
+                    if not {'timestamp', 'content'} == message.keys():
+                        print(f"Error: message should contain 'timestamp' and 'content' but got: {message}", flush=True)
+                        continue
+                    try:
+                        asyncio.create_task(self._callbacks[channel_name](message['timestamp'], message['content']))
+                    except TypeError:
+                        print(f"Error: callback for channel '{channel_name}' has invalid signature. Should be (timestamp:float, content: Any)", flush=True)
+                        continue
+        except redis.exceptions.ConnectionError:
+            await self._reconnect_to_server(self.host, self.port)
+            await self.listen()
 
     async def add_stream_message(
             self,
@@ -117,9 +129,12 @@ class RedisClient:
         :param stream_name: The name of the Redis stream.
         :param content: The content to add to the stream (must be serializable to JSON).
         """
-
-        content = self._to_json(content)
-        await self._r.xadd(stream_name, {'timestamp': str(await self._r.time()), 'content': content})
+        try:
+            content = self._to_json(content)
+            await self._r.xadd(stream_name, {'timestamp': str(await self._r.time()), 'content': content})
+        except redis.exceptions.ConnectionError:
+            await self._reconnect_to_server(self.host, self.port)
+            await self.add_stream_message(stream_name, content)
 
     async def get_latest_stream_message(
             self,
@@ -131,16 +146,20 @@ class RedisClient:
         :param stream_name: The name of the Redis stream.
         :return: A tuple containing the timestamp and the message content, or (None, None) if no messages exist.
         """
-        # read the latest message
-        raw_message = await self._r.xrevrange(stream_name, count=1)
-        # return None if no messages
-        if len(raw_message) == 0:
-            return None, None
-        # latest message
-        raw_message = raw_message[0]
-        # save last read stream id
-        self._last_stream_ids[stream_name] = raw_message[0].decode("utf-8")
-        return self._decode_stream_message(raw_message)
+        try:
+            # read the latest message
+            raw_message = await self._r.xrevrange(stream_name, count=1)
+            # return None if no messages
+            if len(raw_message) == 0:
+                return None, None
+            # latest message
+            raw_message = raw_message[0]
+            # save last read stream id
+            self._last_stream_ids[stream_name] = raw_message[0].decode("utf-8")
+            return self._decode_stream_message(raw_message)
+        except redis.exceptions.ConnectionError:
+            await self._reconnect_to_server(self.host, self.port)
+            return await self.get_latest_stream_message(stream_name)
 
     async def get_unread_stream_messages(
             self,
@@ -154,27 +173,34 @@ class RedisClient:
         :param max_messages: The maximum number of unread messages to fetch.
         :return: List of tuples (timestamp, content) or (None, None) if no unread messages exist.
         """
+        try:
+            messages = []
+            # if it is the first time, get all messages (indicated by 0)
+            stream_id = self._last_stream_ids.get(stream_name, "0")
+            raw_messages = await self._r.xrange(stream_name, stream_id, "+", count=max_messages)
+            if len(raw_messages) == 0:
+                return [(None, None)]
+            # if it not the first time, omit the first message in list because xrange is inclusive
+            if stream_id != "0":
+                raw_messages = raw_messages[1:]
+            if len(raw_messages) == 0:
+                return [(None, None)]
 
-        messages = []
-        # if it is the first time, get all messages (indicated by 0)
-        stream_id = self._last_stream_ids.get(stream_name, "0")
-        raw_messages = await self._r.xrange(stream_name, stream_id, "+", count=max_messages)
-        if len(raw_messages) == 0:
-            return [(None, None)]
-        # if it not the first time, omit the first message in list because xrange is inclusive
-        if stream_id != "0":
-            raw_messages = raw_messages[1:]
-        if len(raw_messages) == 0:
-            return [(None, None)]
-
-        # save the newest stream id
-        self._last_stream_ids[stream_name] = raw_messages[-1][0].decode("utf-8")
-        for r in raw_messages:
-            messages.append(self._decode_stream_message(r))
-        return messages
+            # save the newest stream id
+            self._last_stream_ids[stream_name] = raw_messages[-1][0].decode("utf-8")
+            for r in raw_messages:
+                messages.append(self._decode_stream_message(r))
+            return messages
+        except redis.exceptions.ConnectionError:
+            await self._reconnect_to_server(self.host, self.port)
+            return await self.get_unread_stream_messages(stream_name, max_messages)
 
     async def get_server_time(self):
-        return await self._r.time()
+        try:
+            return await self._r.time()
+        except redis.exceptions.ConnectionError:
+            await self._reconnect_to_server(self.host, self.port)
+            return await self.get_server_time()
 
     @staticmethod
     def _to_json(
