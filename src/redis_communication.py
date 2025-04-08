@@ -36,6 +36,8 @@ class RedisClient:
             print(f"Connected to Redis server at {host}:{port}", flush=True)
             break
 
+        self._pubsub = self._r.pubsub()
+
     def add_subscriber(
             self,
             channel_name: str,
