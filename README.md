@@ -4,25 +4,6 @@ This document provides an overview and instructions for the utilization of the *
 
 ---
 
-### **Used messages and streams**
-
-Firstly, following is a list of used messages and streams together with their usage.
-
-#### Streams
-- `'detect'`: int(sleep delay)
-- `'log-messaging_status'`: str(content)
-- `'log-runtime_status'`: str(content)
-
-#### Messages
-- `'boat_detections'`: list(1, 0)
-- `'tracked_detections'`: dict{"detections":<br />
-    dict{id: {dict{"x": int(x), "y": int(y), "w": int(w), "h", int(h)...} <br />
-    "image_resolution": list[width, height], <br />
-    "capture_time": list[seconds, nanoseconds]}
-- 
-
----
-
 ### **Overview**
 
 The module simplifies interaction with Redis by implementing the `RedisClient` class, which abstracts various Redis functionalities such as:
