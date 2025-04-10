@@ -4,6 +4,18 @@ This document provides an overview and instructions for the utilization of the *
 
 ---
 
+### **Used messages**
+
+Firstly, following is a list of the messages and their usage.
+
+#### Streams
+- `'detect'`: int(sleep delay)
+
+#### Messages
+- `test`: list(1, 0)
+
+---
+
 ### **Overview**
 
 The module simplifies interaction with Redis by implementing the `RedisClient` class, which abstracts various Redis functionalities such as:
