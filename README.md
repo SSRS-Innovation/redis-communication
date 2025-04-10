@@ -4,15 +4,22 @@ This document provides an overview and instructions for the utilization of the *
 
 ---
 
-### **Used messages**
+### **Used messages and streams**
 
-Firstly, following is a list of the messages and their usage.
+Firstly, following is a list of used messages and streams together with their usage.
 
 #### Streams
 - `'detect'`: int(sleep delay)
+- `'log-messaging_status'`: str(content)
+- `'log-runtime_status'`: str(content)
 
 #### Messages
-- `test`: list(1, 0)
+- `'boat_detections'`: list(1, 0)
+- `'tracked_detections'`: dict{"detections":<br />
+    dict{id: {dict{"x": int(x), "y": int(y), "w": int(w), "h", int(h)...} <br />
+    "image_resolution": list[width, height], <br />
+    "capture_time": list[seconds, nanoseconds]}
+- 
 
 ---
 
