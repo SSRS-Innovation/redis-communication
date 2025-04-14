@@ -161,6 +161,38 @@ class RedisClient:
             await self._reconnect_to_server(self.host, self.port)
             return await self.get_latest_stream_message(stream_name)
 
+
+    async def get_stream_message_at_time(
+            self,
+            stream_name: str,
+            timestamp: tuple[int, int],
+            search_forward: bool = False
+    ) -> tuple[tuple[int, int], str | int | float | dict | list] | tuple[None, None]:
+        """
+        Retrieves the newest message before the specified time stamp from a Redis stream.
+
+        :param stream_name: The name of the Redis stream.
+        :param timestamp: The timestamp to search for in the format (seconds, microseconds).
+        :param search_forward: If True, search forward from the timestamp; otherwise, search backward.
+        :return: A tuple containing the timestamp and the message content, or (None, None) if no messages exist.
+        """
+        try:
+            # use timestamp as stream id
+            time_in_milliseconds = timestamp[0] * 1000 + timestamp[1] // 1000
+            if search_forward:
+                raw_message = await self._r.xrange(stream_name, time_in_milliseconds, count=1)
+            else:
+                raw_message = await self._r.xrevrange(stream_name, time_in_milliseconds, count=1)
+            # return None if no messages
+            if len(raw_message) == 0:
+                return None, None
+            # latest message
+            raw_message = raw_message[0]
+            return self._decode_stream_message(raw_message)
+        except redis.exceptions.ConnectionError:
+            await self.connect_to_server(self.host, self.port)
+            return await self.get_stream_message_at_time(stream_name, timestamp, search_forward)
+
     async def get_unread_stream_messages(
             self,
             stream_name: str,
