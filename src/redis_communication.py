@@ -191,8 +191,6 @@ class RedisClient:
                 return None, None
             # latest message
             raw_message = raw_message[0]
-            # save last read stream id
-            self._last_stream_ids[stream_name] = raw_message[0].decode("utf-8")
             return self._decode_stream_message(raw_message)
         except redis.exceptions.ConnectionError:
             self.connect_to_server(self.host, self.port)
