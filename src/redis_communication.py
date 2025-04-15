@@ -32,7 +32,7 @@ class RedisClient:
                 print(f"Connected to Redis server at {host}:{port}", flush=True)
                 break
             except redis.exceptions.ConnectionError as e:
-                print("Redis server is not responding. Sleeping...", flush=True)
+                print("Redis server is not responding. Sleeping...", flush=True, file=sys.stderr)
                 time.sleep(5)
 
     def add_subscriber(
