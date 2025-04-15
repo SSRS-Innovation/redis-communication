@@ -1,3 +1,4 @@
+import sys
 import redis
 import json
 import ast
@@ -35,7 +36,7 @@ class RedisClient:
                 break
 
             except redis.exceptions.ConnectionError as e:
-                print("Redis server is not responding. Sleeping 5 seconds...", flush=True)
+                print("Redis server is not responding. Sleeping 5 seconds...", flush=True, file=sys.stderr)
                 await asyncio.sleep(5)
 
     async def add_subscriber(
