@@ -1,3 +1,4 @@
+import sys
 import redis
 import json
 import ast
@@ -29,7 +30,7 @@ class RedisClient:
             try:
                 self._r.ping()
             except redis.exceptions.ConnectionError as e:
-                print("Redis server is not responding. Sleeping...", flush=True)
+                print("Redis server is not responding. Sleeping...", flush=True, file=sys.stderr)
                 time.sleep(5)
 
                 continue
