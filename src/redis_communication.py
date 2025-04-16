@@ -110,10 +110,9 @@ class RedisClient:
                         continue
                     try:
                         self._callbacks[channel_name](message['timestamp'], message['content'])
-                    except TypeError as e:
-                        print(e)
-                        print(f"Callback for channel '{channel_name}' might have invalid signature. Should be (timestamp:(int, int), content: Any)", flush=True)
-                        continue
+                    except TypeError:
+                        print(f"\nCallback for channel '{channel_name}' might have invalid signature. Should be (timestamp:(int, int), content: Any)\n", flush=True, file=sys.stderr)
+                        raise
         except redis.exceptions.ConnectionError:
             self.connect_to_server(self.host, self.port)
             self.listen()
