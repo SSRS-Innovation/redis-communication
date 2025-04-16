@@ -113,8 +113,8 @@ class RedisClient:
                     try:
                         asyncio.create_task(self._callbacks[channel_name](message['timestamp'], message['content']))
                     except TypeError:
-                        print(f"Error: callback for channel '{channel_name}' has invalid signature. Should be (timestamp:float, content: Any)", flush=True)
-                        continue
+                        print(f"\nCallback for channel '{channel_name}' might have invalid signature. Should be (timestamp:(int, int), content: Any)\n", flush=True, file=sys.stderr)
+                        raise
         except redis.exceptions.ConnectionError:
             await self._reconnect_to_server(self.host, self.port)
             await self.listen()
